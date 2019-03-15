@@ -293,6 +293,49 @@ func (_DocEvents) List(input *DocEventsListInput, offset, limit int64) ([]*DocEv
 	return ary, nil
 }
 
+type DocEventsHistory struct {
+	FromState string
+	DocAction string
+	ToState   string
+	Group     string
+	Data      string
+	Ctime     time.Time
+}
+
+// DocEventsHistory answers the possible document wf_docevent_application.
+func (_DocEvents) DocEventsHistory(dtype DocTypeID, id DocumentID) ([]*DocEventsHistory, error) {
+	q := `
+	SELECT dsm1.name, dam.name, dsm2.name, gm.name, de.data, de.ctime
+	FROM wf_docevent_application dea
+	JOIN wf_docstates_master dsm1 ON dsm1.id = dea.from_state_id
+	JOIN wf_docstates_master dsm2 ON dsm2.id = dea.to_state_id
+	JOIN wf_docevents de ON de.id = dea.docevent_id
+	JOIN wf_docactions_master dam ON dam.id = de.docaction_id
+	JOIN wf_groups_master gm ON gm.id = de.group_id
+	WHERE dea.doctype_id = ? AND dea.doc_id = ? ORDER BY de.ctime DESC
+	`
+	rows, err := db.Query(q, dtype, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*DocEventsHistory, 0, 10)
+	for rows.Next() {
+		var elem DocEventsHistory
+		err = rows.Scan(&elem.FromState, &elem.DocAction, &elem.ToState, &elem.Group, &elem.Data, &elem.Ctime)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // Get retrieves a document event from the database, using the given
 // event ID.
 func (_DocEvents) Get(eid DocEventID) (*DocEvent, error) {
