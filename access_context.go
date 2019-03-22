@@ -440,6 +440,50 @@ func (_AccessContexts) GroupRoles(id AccessContextID, gids []GroupID, offset, li
 	return grs, nil
 }
 
+type GroupRolesstruct struct {
+	Id      int64
+	AcId    int64
+	GroupId int64
+	RoleId  int64
+}
+
+//自定义 直接查出数据库
+func (_AccessContexts) GroupRolesList(offset, limit int64) ([]*GroupRolesstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id,ac_id,group_id,role_id
+	FROM wf_ac_group_roles
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*GroupRolesstruct, 0, 10)
+	for rows.Next() {
+		var elem GroupRolesstruct
+		err = rows.Scan(&elem.Id, &elem.AcId, &elem.GroupId, &elem.RoleId)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // AddGroupRole assigns the specified role to the given group, if it
 // is not already assigned.
 func (_AccessContexts) AddGroupRole(otx *sql.Tx, id AccessContextID, gid GroupID, rid RoleID) error {

@@ -306,6 +306,50 @@ func (_DocTypes) Transitions(dtype DocTypeID, from DocStateID) (map[DocStateID]*
 	return res, nil
 }
 
+type Transitionstruct struct {
+	Id          int64
+	DoctypeId   int64
+	FromStateId int64
+	DocactionId int64
+	ToStateId   int64
+}
+
+func (_DocTypes) TransitionsList(offset, limit int64) ([]*Transitionstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id,doctype_id,from_state_id,docaction_id,to_state_id
+	FROM wf_docstate_transitions
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Transitionstruct, 0, 10)
+	for rows.Next() {
+		var elem Transitionstruct
+		err = rows.Scan(&elem.Id, &elem.DoctypeId, &elem.FromStateId, &elem.DocactionId, &elem.ToStateId)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // _Transitions answers the possible document states into which a
 // document currently in the given state can transition.  Only
 // identifiers are answered in the map.

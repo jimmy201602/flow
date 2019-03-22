@@ -354,6 +354,107 @@ func (_Roles) Permissions(rid RoleID) (map[string]struct {
 	return das, nil
 }
 
+type RolePermission struct {
+	RoleID     RoleID
+	TypeAction typeaction
+}
+
+type typeaction struct {
+	DocTypeID DocTypeID
+	Actions   []*DocAction
+}
+
+type Permissionstruct struct {
+	Id        int64
+	RoleId    int64
+	DoctypeId int64
+	ActionId  int64
+}
+
+//自定义查询permission
+func (_Roles) PermissionsList(rid RoleID) (rp RolePermission, err error) {
+	q := `
+	SELECT dtm.id, dtm.name, dam.id, dam.name, dam.reconfirm
+	FROM wf_doctypes_master dtm
+	JOIN wf_role_docactions rdas ON dtm.id = rdas.doctype_id
+	JOIN wf_docactions_master dam ON dam.id = rdas.docaction_id
+	WHERE rdas.role_id = ?
+	`
+	rows, err := db.Query(q, rid)
+	if err != nil {
+		return rp, err
+	}
+	defer rows.Close()
+	das := make(map[string]struct {
+		DocTypeID DocTypeID
+		Actions   []*DocAction
+	})
+	var ta typeaction
+	for rows.Next() {
+		var dt DocType
+		var da DocAction
+		err = rows.Scan(&dt.ID, &dt.Name, &da.ID, &da.Name, &da.Reconfirm)
+		if err != nil {
+			return rp, err
+		}
+		st, ok := das[dt.Name]
+		if !ok {
+			st.DocTypeID = dt.ID
+			ta.DocTypeID = dt.ID
+			st.Actions = make([]*DocAction, 0, 1)
+			ta.Actions = make([]*DocAction, 0, 1)
+		}
+		st.Actions = append(st.Actions, &da)
+		ta.Actions = append(ta.Actions, &da)
+		das[dt.Name] = st
+	}
+	rp.TypeAction = ta
+	rp.RoleID = rid
+
+	if err = rows.Err(); err != nil {
+		return rp, err
+	}
+
+	return rp, nil
+}
+
+//直接查出数据库
+func (_Roles) PermissionsList1(offset, limit int64) ([]*Permissionstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id,role_id,doc_type_id,action_id
+	FROM wf_role_docactions
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Permissionstruct, 0, 10)
+	for rows.Next() {
+		var elem Permissionstruct
+		err = rows.Scan(&elem.Id, &elem.RoleId, &elem.DoctypeId, &elem.ActionId)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // HasPermission answers `true` if this role has the queried
 // permission for the given document type.
 func (_Roles) HasPermission(rid RoleID, dtype DocTypeID, action DocActionID) (bool, error) {

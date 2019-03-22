@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"math"
 )
 
 // NodeID is the type of unique identifiers of nodes.
@@ -341,6 +342,44 @@ func (_Nodes) List(id WorkflowID) ([]*Node, error) {
 			return nil, err
 		}
 		elem.nfunc = defNodeFunc
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
+// NodeList answers a list of the nodes.
+func (_Nodes) NodeList(offset, limit int64) ([]*Node, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id, doctype_id, docstate_id, ac_id, workflow_id, name, type
+	FROM wf_workflow_nodes
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Node, 0, 10)
+	for rows.Next() {
+		var elem Node
+		err = rows.Scan(&elem.ID, &elem.DocType, &elem.State, &elem.AccCtx, &elem.Wflow, &elem.Name, &elem.NodeType)
+		if err != nil {
+			return nil, err
+		}
+		elem.nfunc = defNodeFunc //这个是干嘛的
 		ary = append(ary, &elem)
 	}
 	if err = rows.Err(); err != nil {

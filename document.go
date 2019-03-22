@@ -383,6 +383,57 @@ func (_Documents) List(input *DocumentsListInput, offset, limit int64) ([]*Docum
 	return ary, nil
 }
 
+type Documentstruct struct {
+	Id         int64
+	Path       string
+	AcId       int64
+	DocstateId int64
+	GroupId    int64
+	Ctime      time.Time
+	Title      string
+	Data       string
+}
+
+//自定义直接查出数据库
+func (_Documents) DocumentList(id DocTypeID, offset, limit int64) ([]*Documentstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	// Base query.
+	tbl := DocTypes.docStorName(id)
+
+	q := `
+	SELECT id, path, ac_id, docstate_id, group_id, ctime, title, data
+	FROM ` + tbl + `
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Documentstruct, 0, 10)
+	for rows.Next() {
+		var elem Documentstruct
+		err = rows.Scan(&elem.Id, &elem.Path, &elem.AcId, &elem.DocstateId, &elem.GroupId, &elem.Ctime, &elem.Title, &elem.Data)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // Get initialises a document by reading from the database.
 //
 // N.B. This retrieves the primary data of the document.  Other
