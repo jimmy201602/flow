@@ -31,10 +31,11 @@ type UserID int64
 // provider application or directory.  `flow` neither defines nor
 // manages users.
 type User struct {
-	ID        UserID `json:"ID"`               // Must be globally-unique
-	FirstName string `json:"FirstName"`        // For display purposes only
-	LastName  string `json:"LastName"`         // For display purposes only
-	Email     string `json:"Email"`            // E-mail address of this user
+	ID        UserID `json:"ID"`        // Must be globally-unique
+	FirstName string `json:"FirstName"` // For display purposes only
+	LastName  string `json:"LastName"`  // For display purposes only
+	Email     string `json:"Email"`     // E-mail address of this user
+	UserName  string `json:"UserName"`
 	Active    bool   `json:"Active,omitempty"` // Is this user account active?
 }
 
@@ -132,6 +133,24 @@ func (_Users) GetByEmail(email string) (*User, error) {
 
 	var elem User
 	row := db.QueryRow("SELECT id, first_name, last_name, email, active FROM wf_users_master WHERE email = ?", email)
+	err := row.Scan(&elem.ID, &elem.FirstName, &elem.LastName, &elem.Email, &elem.Active)
+	if err != nil {
+		return nil, err
+	}
+
+	return &elem, nil
+}
+
+// GetByEmail retrieves user information from the database, by looking
+// up the given e-mail address.
+func (_Users) GetByName(username string) (*User, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return nil, errors.New("username should be non-empty")
+	}
+
+	var elem User
+	row := db.QueryRow("SELECT id, first_name, last_name, email, active FROM wf_users_master WHERE first_name = ?", username)
 	err := row.Scan(&elem.ID, &elem.FirstName, &elem.LastName, &elem.Email, &elem.Active)
 	if err != nil {
 		return nil, err

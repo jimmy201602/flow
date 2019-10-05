@@ -25,6 +25,8 @@ import (
 // DocTypeID is the type of unique identifiers of document types.
 type DocTypeID int64
 
+type DocTransitionID int64
+
 // DocType enumerates the types of documents in the system, as defined
 // by the consuming application.  Each document type has an associated
 // workflow definition that drives its life cycle.
@@ -440,6 +442,40 @@ func (_DocTypes) RemoveTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID
 	AND docaction_id = ?
 	`
 	_, err = tx.Exec(q, dtype, state, action)
+	if err != nil {
+		return err
+	}
+
+	if otx == nil {
+		err = tx.Commit()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Rename renames the given document transition.
+func (_DocTypes) RenameTransition(otx *sql.Tx, id DocTransitionID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name cannot be empty")
+	}
+
+	var tx *sql.Tx
+	var err error
+	if otx == nil {
+		tx, err = db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	} else {
+		tx = otx
+	}
+
+	_, err = tx.Exec("UPDATE wf_docstate_transitions SET name = ? WHERE id = ?", name, id)
 	if err != nil {
 		return err
 	}

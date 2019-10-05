@@ -379,7 +379,6 @@ func (_Documents) List(input *DocumentsListInput, offset, limit int64) ([]*Docum
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-
 	return ary, nil
 }
 

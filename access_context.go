@@ -447,7 +447,7 @@ type GroupRolesstruct struct {
 	RoleId  int64
 }
 
-//×Ô¶¨Òå Ö±½Ó²é³öÊı¾İ¿â
+//è‡ªå®šä¹‰ ç›´æ¥æŸ¥å‡ºæ•°æ®åº“
 func (_AccessContexts) GroupRolesList(offset, limit int64) ([]*GroupRolesstruct, error) {
 	if offset < 0 || limit < 0 {
 		return nil, errors.New("offset and limit must be non-negative integers")
