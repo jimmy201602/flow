@@ -102,7 +102,7 @@ func (_Groups) New(otx *sql.Tx, name string, gtype string) (GroupID, error) {
 	// Nothing to do
 
 	default:
-		return 0, errors.New("unknown group type")
+		return 0, errors.New("unknown group type, must be 'G'")
 	}
 
 	var tx *sql.Tx

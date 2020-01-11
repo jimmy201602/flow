@@ -130,8 +130,11 @@ func (_Mailboxes) ListByUser(uid UserID, offset, limit int64, unread bool) ([]*N
 		AND gm.group_type = 'S'
 	)
 	`
+	//原代码这里unread为true时，查询为1的，unread为false的时候，查询所有
 	if unread {
 		q += `AND mbs.unread = 1`
+	} else {
+		q += `AND mbs.unread = 0`
 	}
 	q += `
 	ORDER BY msgs.id

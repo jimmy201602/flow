@@ -87,7 +87,7 @@ func (w *Workflow) ApplyEvent(otx *sql.Tx, event *DocEvent, recipients []GroupID
 	} else {
 		tx = otx
 	}
-
+	//这里会给自己发一封信
 	nstate, err := n.applyEvent(tx, event, recipients)
 	if err != nil {
 		return 0, err

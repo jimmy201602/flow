@@ -45,6 +45,61 @@ type _Users struct{}
 // Users provides a resource-like interface to users in the system.
 var Users _Users
 
+// New creates a new group that can be populated with users later.
+func (_Users) New(otx *sql.Tx, first_name, last_name, email string, active int) (UserID, error) {
+	first_name = strings.TrimSpace(first_name)
+	last_name = strings.TrimSpace(last_name)
+	email = strings.TrimSpace(email)
+
+	if first_name == "" || last_name == "" || email == "" {
+		return 0, errors.New("name and type must not be empty")
+	}
+
+	var tx *sql.Tx
+	var err error
+	var res sql.Result
+	if otx == nil {
+		tx, err = db.Begin()
+		if err != nil {
+			return 0, err
+		}
+		defer tx.Rollback()
+	} else {
+		tx = otx
+	}
+	switch active {
+	case 0:
+		res, err = tx.Exec("INSERT INTO users_master(first_name, last_name, email, active) VALUES(?, ?, ?, ?)", first_name, last_name, email, 0)
+		// res, err := tx.Exec("INSERT INTO wf_groups_master(name, group_type) VALUES(?, ?)", name, gtype)
+		if err != nil {
+			return 0, err
+		}
+	case 1:
+		res, err = tx.Exec("INSERT INTO users_master(first_name, last_name, email, active) VALUES(?, ?, ?, ?)", first_name, last_name, email, 1)
+		// res, err := tx.Exec("INSERT INTO wf_groups_master(name, group_type) VALUES(?, ?)", name, gtype)
+		if err != nil {
+			return 0, err
+		}
+	default:
+		return 0, errors.New("unknown group type")
+	}
+
+	var id int64
+	id, err = res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	if otx == nil {
+		err = tx.Commit()
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return UserID(id), nil
+}
+
 // List answers a subset of the users, based on the input
 // specification.
 //

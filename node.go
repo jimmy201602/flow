@@ -168,11 +168,13 @@ func (n *Node) applyEvent(otx *sql.Tx, event *DocEvent, recipients []GroupID) (D
 		}
 
 		// Post messages.
+		//为何要给自己也发一封？当选择自己的时候，只给自己发一封。
 		recv := make(map[GroupID]struct{})
 		for _, gid := range recipients {
 			recv[gid] = struct{}{}
 		}
 		msg := n.nfunc(doc, event)
+		//这里会给自己发一封信
 		recv, err = tnode.determineRecipients(otx, recv, doc, event, tacid)
 		if err != nil {
 			return 0, err
@@ -234,6 +236,7 @@ func (n *Node) determineRecipients(otx *sql.Tx, recv map[GroupID]struct{}, doc *
 	ORDER BY group_id
 	LIMIT 1
 	`
+	//似乎似乎是这里将event里对应的group发一份邮件，所以就相当于给自己也发了一封。
 	rows, err := otx.Query(q, acid, event.Group)
 	if err != nil {
 		return nil, err
@@ -351,7 +354,7 @@ func (_Nodes) List(id WorkflowID) ([]*Node, error) {
 	return ary, nil
 }
 
-// NodeList answers a list of the nodes.
+// NodeList answers a list of the nodes 增加了accid.
 func (_Nodes) NodeList(offset, limit int64) ([]*Node, error) {
 	if offset < 0 || limit < 0 {
 		return nil, errors.New("offset and limit must be non-negative integers")
