@@ -228,6 +228,7 @@ func (n *Node) recordEvent(otx *sql.Tx, event *DocEvent, tstate DocStateID, stat
 func (n *Node) determineRecipients(otx *sql.Tx, recv map[GroupID]struct{}, doc *Document,
 	event *DocEvent, acid AccessContextID) (map[GroupID]struct{}, error) {
 	// We have to notify reporting authorities.
+	// 我们必须通知报告编者，要通知event的作者自己
 	q := `
 	SELECT reports_to
 	FROM wf_ac_group_hierarchy
@@ -236,7 +237,7 @@ func (n *Node) determineRecipients(otx *sql.Tx, recv map[GroupID]struct{}, doc *
 	ORDER BY group_id
 	LIMIT 1
 	`
-	//似乎似乎是这里将event里对应的group发一份邮件，所以就相当于给自己也发了一封。
+	//这里将event里对应的group发一份邮件，所以就相当于给自己也发了一封。
 	rows, err := otx.Query(q, acid, event.Group)
 	if err != nil {
 		return nil, err

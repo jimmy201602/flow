@@ -339,9 +339,9 @@ func (_Documents) List(input *DocumentsListInput, offset, limit int64) ([]*Docum
 	if len(where) > 0 {
 		q += ` AND ` + strings.Join(where, ` AND `)
 	}
-
+	//20200129按逆序排列
 	q += `
-	ORDER BY docs.id
+	ORDER BY docs.id DESC
 	LIMIT ? OFFSET ?
 	`
 	args = append(args, limit, offset)

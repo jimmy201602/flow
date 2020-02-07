@@ -136,8 +136,9 @@ func (_Mailboxes) ListByUser(uid UserID, offset, limit int64, unread bool) ([]*N
 	} else {
 		q += `AND mbs.unread = 0`
 	}
+	//20200130按逆序排列
 	q += `
-	ORDER BY msgs.id
+	ORDER BY msgs.id DESC
 	LIMIT ? OFFSET ?
 	`
 
@@ -245,6 +246,72 @@ func (_Mailboxes) GetMessage(msgID MessageID) (*Notification, error) {
 	}
 
 	return &elem, nil
+}
+
+//根据msgID查出所有mailbox
+func (_Mailboxes) GetMessageList(msgID MessageID, offset, limit int64, unread bool) ([]*Notification, error) {
+	if msgID <= 0 {
+		return nil, errors.New("message ID should be positive integers")
+	}
+
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT mbs.group_id, mbs.message_id, mbs.unread, mbs.ctime
+	FROM wf_mailboxes mbs
+	WHERE mbs.message_id = ?
+	`
+	if unread {
+		q += `AND mbs.unread = 1`
+	}
+	q += `
+	ORDER BY msgs.id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, msgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Notification, 0, 10)
+	for rows.Next() {
+		var elem Notification
+		err = rows.Scan(&elem.GroupID, &elem.Message.ID,
+			&elem.Unread, &elem.Ctime)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+
+	// q = `
+	// SELECT mbs.group_id, msgs.id, msgs.doctype_id, dtm.name, msgs.doc_id, msgs.docevent_id, msgs.title, msgs.data, mbs.unread, mbs.ctime
+	// FROM wf_messages msgs
+	// JOIN wf_mailboxes mbs ON mbs.message_id = msgs.id
+	// JOIN wf_doctypes_master dtm ON dtm.id = msgs.doctype_id
+	// WHERE mbs.id = ?
+	// `
+	// row := db.QueryRow(q, msgID)
+	// var elem Notification
+	// err := row.Scan(&elem.GroupID, &elem.Message.ID, &elem.Message.DocType.ID,
+	// 	&elem.Message.DocType.Name, &elem.Message.DocID, &elem.Message.Event,
+	// 	&elem.Message.Title, &elem.Message.Data, &elem.Unread, &elem.Ctime)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return &elem, nil
 }
 
 // ReassignMessage removes the message with the given ID from its
