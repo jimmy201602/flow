@@ -34,6 +34,9 @@ var blobsDir string
 func init() {
 	f := log.Flags()
 	log.SetFlags(f | log.Lmicroseconds | log.Lshortfile)
+	driver, connStr := "mysql", "travis@/flow?charset=utf8&parseTime=true"
+	tdb := fatal1(sql.Open(driver, connStr)).(*sql.DB)
+	RegisterDB(tdb)
 }
 
 // RegisterDB provides an already initialised database handle to `flow`.
@@ -65,4 +68,12 @@ func SetBlobsDir(base string) error {
 	blobsDir = base
 
 	return nil
+}
+
+// fatal1 expects a value and an error value as its arguments.
+func fatal1(val1 interface{}, err error) interface{} {
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return val1
 }

@@ -220,7 +220,7 @@ func (_Documents) New(otx *sql.Tx, input *DocumentsNewInput) (DocumentID, error)
 
 	var tx *sql.Tx
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return 0, err
 		}
@@ -339,9 +339,9 @@ func (_Documents) List(input *DocumentsListInput, offset, limit int64) ([]*Docum
 	if len(where) > 0 {
 		q += ` AND ` + strings.Join(where, ` AND `)
 	}
-
+	//20200129按逆序排列
 	q += `
-	ORDER BY docs.id
+	ORDER BY docs.id DESC
 	LIMIT ? OFFSET ?
 	`
 	args = append(args, limit, offset)
@@ -373,6 +373,56 @@ func (_Documents) List(input *DocumentsListInput, offset, limit int64) ([]*Docum
 
 		if title.Valid {
 			elem.Title = title.String
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return ary, nil
+}
+
+type Documentstruct struct {
+	Id         int64
+	Path       string
+	AcId       int64
+	DocstateId int64
+	GroupId    int64
+	Ctime      time.Time
+	Title      string
+	Data       string
+}
+
+//自定义直接查出数据库
+func (_Documents) DocumentList(id DocTypeID, offset, limit int64) ([]*Documentstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	// Base query.
+	tbl := DocTypes.docStorName(id)
+
+	q := `
+	SELECT id, path, ac_id, docstate_id, group_id, ctime, title, data
+	FROM ` + tbl + `
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Documentstruct, 0, 10)
+	for rows.Next() {
+		var elem Documentstruct
+		err = rows.Scan(&elem.Id, &elem.Path, &elem.AcId, &elem.DocstateId, &elem.GroupId, &elem.Ctime, &elem.Title, &elem.Data)
+		if err != nil {
+			return nil, err
 		}
 		ary = append(ary, &elem)
 	}
@@ -490,7 +540,7 @@ func (_Documents) SetTitle(otx *sql.Tx, dtype DocTypeID, id DocumentID, title st
 
 	var tx *sql.Tx
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -523,8 +573,9 @@ func (_Documents) SetData(otx *sql.Tx, dtype DocTypeID, id DocumentID, data stri
 	tbl := DocTypes.docStorName(dtype)
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -534,7 +585,7 @@ func (_Documents) SetData(otx *sql.Tx, dtype DocTypeID, id DocumentID, data stri
 	}
 
 	q := `UPDATE ` + tbl + ` SET data = ?, ctime = NOW() WHERE id = ?`
-	_, err := tx.Exec(q, data, id)
+	_, err = tx.Exec(q, data, id)
 	if err != nil {
 		return err
 	}
@@ -667,7 +718,7 @@ func (_Documents) AddBlob(otx *sql.Tx, dtype DocTypeID, id DocumentID, blob *Blo
 
 	var tx *sql.Tx
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -705,8 +756,9 @@ func (_Documents) DeleteBlob(otx *sql.Tx, dtype DocTypeID, id DocumentID, sha1 s
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -722,7 +774,7 @@ func (_Documents) DeleteBlob(otx *sql.Tx, dtype DocTypeID, id DocumentID, sha1 s
 	`
 	var count int64
 	row := tx.QueryRow(q, sha1)
-	err := row.Scan(&count)
+	err = row.Scan(&count)
 	if err != nil {
 		return err
 	}
@@ -826,7 +878,7 @@ func (_Documents) AddTags(otx *sql.Tx, dtype DocTypeID, id DocumentID, tags ...s
 
 	var tx *sql.Tx
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -869,8 +921,9 @@ func (_Documents) RemoveTag(otx *sql.Tx, dtype DocTypeID, id DocumentID, tag str
 	tag = strings.ToLower(tag)
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -886,7 +939,7 @@ func (_Documents) RemoveTag(otx *sql.Tx, dtype DocTypeID, id DocumentID, tag str
 	AND doc_id = ?
 	AND tag = ?
 	`
-	_, err := tx.Exec(q, dtype, id, tag)
+	_, err = tx.Exec(q, dtype, id, tag)
 	if err != nil {
 		return err
 	}

@@ -130,11 +130,15 @@ func (_Mailboxes) ListByUser(uid UserID, offset, limit int64, unread bool) ([]*N
 		AND gm.group_type = 'S'
 	)
 	`
+	//原代码这里unread为true时，查询为1的，unread为false的时候，查询所有
 	if unread {
 		q += `AND mbs.unread = 1`
+	} else {
+		q += `AND mbs.unread = 0`
 	}
+	//20200130按逆序排列
 	q += `
-	ORDER BY msgs.id
+	ORDER BY msgs.id DESC
 	LIMIT ? OFFSET ?
 	`
 
@@ -244,6 +248,72 @@ func (_Mailboxes) GetMessage(msgID MessageID) (*Notification, error) {
 	return &elem, nil
 }
 
+//根据msgID查出所有mailbox
+func (_Mailboxes) GetMessageList(msgID MessageID, offset, limit int64, unread bool) ([]*Notification, error) {
+	if msgID <= 0 {
+		return nil, errors.New("message ID should be positive integers")
+	}
+
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT mbs.group_id, mbs.message_id, mbs.unread, mbs.ctime
+	FROM wf_mailboxes mbs
+	WHERE mbs.message_id = ?
+	`
+	if unread {
+		q += `AND mbs.unread = 1`
+	}
+	q += `
+	ORDER BY msgs.id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, msgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Notification, 0, 10)
+	for rows.Next() {
+		var elem Notification
+		err = rows.Scan(&elem.GroupID, &elem.Message.ID,
+			&elem.Unread, &elem.Ctime)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+
+	// q = `
+	// SELECT mbs.group_id, msgs.id, msgs.doctype_id, dtm.name, msgs.doc_id, msgs.docevent_id, msgs.title, msgs.data, mbs.unread, mbs.ctime
+	// FROM wf_messages msgs
+	// JOIN wf_mailboxes mbs ON mbs.message_id = msgs.id
+	// JOIN wf_doctypes_master dtm ON dtm.id = msgs.doctype_id
+	// WHERE mbs.id = ?
+	// `
+	// row := db.QueryRow(q, msgID)
+	// var elem Notification
+	// err := row.Scan(&elem.GroupID, &elem.Message.ID, &elem.Message.DocType.ID,
+	// 	&elem.Message.DocType.Name, &elem.Message.DocID, &elem.Message.Event,
+	// 	&elem.Message.Title, &elem.Message.Data, &elem.Unread, &elem.Ctime)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return &elem, nil
+}
+
 // ReassignMessage removes the message with the given ID from its
 // current mailbox, and delivers it to the given other group's
 // mailbox.
@@ -256,8 +326,9 @@ func (_Mailboxes) ReassignMessage(otx *sql.Tx, fgid, tgid GroupID, msgID Message
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -271,7 +342,7 @@ func (_Mailboxes) ReassignMessage(otx *sql.Tx, fgid, tgid GroupID, msgID Message
 	WHERE group_id = ?
 	AND message_id = ?
 	`
-	_, err := tx.Exec(q, tgid, fgid, msgID)
+	_, err = tx.Exec(q, tgid, fgid, msgID)
 	if err != nil {
 		return err
 	}
@@ -294,8 +365,9 @@ func (_Mailboxes) SetStatusByUser(otx *sql.Tx, uid UserID, msgID MessageID, stat
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -315,7 +387,7 @@ func (_Mailboxes) SetStatusByUser(otx *sql.Tx, uid UserID, msgID MessageID, stat
 	)
 	AND message_id = ?
 	`
-	_, err := tx.Exec(q, status, uid, msgID)
+	_, err = tx.Exec(q, status, uid, msgID)
 	if err != nil {
 		return err
 	}
@@ -338,8 +410,9 @@ func (_Mailboxes) SetStatusByGroup(otx *sql.Tx, gid GroupID, msgID MessageID, st
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -353,7 +426,7 @@ func (_Mailboxes) SetStatusByGroup(otx *sql.Tx, gid GroupID, msgID MessageID, st
 	WHERE group_id = ?
 	AND message_id = ?
 	`
-	_, err := tx.Exec(q, status, gid, msgID)
+	_, err = tx.Exec(q, status, gid, msgID)
 	if err != nil {
 		return err
 	}

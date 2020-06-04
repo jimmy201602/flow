@@ -25,6 +25,8 @@ import (
 // DocTypeID is the type of unique identifiers of document types.
 type DocTypeID int64
 
+type DocTransitionID int64
+
 // DocType enumerates the types of documents in the system, as defined
 // by the consuming application.  Each document type has an associated
 // workflow definition that drives its life cycle.
@@ -71,8 +73,9 @@ func (_DocTypes) New(otx *sql.Tx, name string) (DocTypeID, error) {
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return 0, err
 		}
@@ -211,8 +214,9 @@ func (_DocTypes) Rename(otx *sql.Tx, id DocTypeID, name string) error {
 	}
 
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -221,7 +225,7 @@ func (_DocTypes) Rename(otx *sql.Tx, id DocTypeID, name string) error {
 		tx = otx
 	}
 
-	_, err := tx.Exec("UPDATE wf_doctypes_master SET name = ? WHERE id = ?", name, id)
+	_, err = tx.Exec("UPDATE wf_doctypes_master SET name = ? WHERE id = ?", name, id)
 	if err != nil {
 		return err
 	}
@@ -304,6 +308,50 @@ func (_DocTypes) Transitions(dtype DocTypeID, from DocStateID) (map[DocStateID]*
 	return res, nil
 }
 
+type Transitionstruct struct {
+	Id          int64
+	DoctypeId   int64
+	FromStateId int64
+	DocactionId int64
+	ToStateId   int64
+}
+
+func (_DocTypes) TransitionsList(offset, limit int64) ([]*Transitionstruct, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id,doctype_id,from_state_id,docaction_id,to_state_id
+	FROM wf_docstate_transitions
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Transitionstruct, 0, 10)
+	for rows.Next() {
+		var elem Transitionstruct
+		err = rows.Scan(&elem.Id, &elem.DoctypeId, &elem.FromStateId, &elem.DocactionId, &elem.ToStateId)
+		if err != nil {
+			return nil, err
+		}
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
 // _Transitions answers the possible document states into which a
 // document currently in the given state can transition.  Only
 // identifiers are answered in the map.
@@ -342,8 +390,9 @@ func (_DocTypes) _Transitions(dtype DocTypeID, state DocStateID) (map[DocActionI
 func (_DocTypes) AddTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID,
 	action DocActionID, toState DocStateID) error {
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -356,7 +405,7 @@ func (_DocTypes) AddTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID,
 	INSERT INTO wf_docstate_transitions(doctype_id, from_state_id, docaction_id, to_state_id)
 	VALUES(?, ?, ?, ?)
 	`
-	_, err := tx.Exec(q, dtype, state, action, toState)
+	_, err = tx.Exec(q, dtype, state, action, toState)
 	if err != nil {
 		return err
 	}
@@ -375,8 +424,9 @@ func (_DocTypes) AddTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID,
 // document action performed on documents in the given current state.
 func (_DocTypes) RemoveTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID, action DocActionID) error {
 	var tx *sql.Tx
+	var err error
 	if otx == nil {
-		tx, err := db.Begin()
+		tx, err = db.Begin()
 		if err != nil {
 			return err
 		}
@@ -391,7 +441,41 @@ func (_DocTypes) RemoveTransition(otx *sql.Tx, dtype DocTypeID, state DocStateID
 	AND from_state_id =?
 	AND docaction_id = ?
 	`
-	_, err := tx.Exec(q, dtype, state, action)
+	_, err = tx.Exec(q, dtype, state, action)
+	if err != nil {
+		return err
+	}
+
+	if otx == nil {
+		err = tx.Commit()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Rename renames the given document transition.
+func (_DocTypes) RenameTransition(otx *sql.Tx, id DocTransitionID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name cannot be empty")
+	}
+
+	var tx *sql.Tx
+	var err error
+	if otx == nil {
+		tx, err = db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	} else {
+		tx = otx
+	}
+
+	_, err = tx.Exec("UPDATE wf_docstate_transitions SET name = ? WHERE id = ?", name, id)
 	if err != nil {
 		return err
 	}

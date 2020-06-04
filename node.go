@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"math"
 )
 
 // NodeID is the type of unique identifiers of nodes.
@@ -167,11 +168,13 @@ func (n *Node) applyEvent(otx *sql.Tx, event *DocEvent, recipients []GroupID) (D
 		}
 
 		// Post messages.
+		//为何要给自己也发一封？当选择自己的时候，只给自己发一封。
 		recv := make(map[GroupID]struct{})
 		for _, gid := range recipients {
 			recv[gid] = struct{}{}
 		}
 		msg := n.nfunc(doc, event)
+		//这里会给自己发一封信
 		recv, err = tnode.determineRecipients(otx, recv, doc, event, tacid)
 		if err != nil {
 			return 0, err
@@ -225,6 +228,7 @@ func (n *Node) recordEvent(otx *sql.Tx, event *DocEvent, tstate DocStateID, stat
 func (n *Node) determineRecipients(otx *sql.Tx, recv map[GroupID]struct{}, doc *Document,
 	event *DocEvent, acid AccessContextID) (map[GroupID]struct{}, error) {
 	// We have to notify reporting authorities.
+	// 我们必须通知报告编者，要通知event的作者自己
 	q := `
 	SELECT reports_to
 	FROM wf_ac_group_hierarchy
@@ -233,6 +237,7 @@ func (n *Node) determineRecipients(otx *sql.Tx, recv map[GroupID]struct{}, doc *
 	ORDER BY group_id
 	LIMIT 1
 	`
+	//这里将event里对应的group发一份邮件，所以就相当于给自己也发了一封。
 	rows, err := otx.Query(q, acid, event.Group)
 	if err != nil {
 		return nil, err
@@ -341,6 +346,44 @@ func (_Nodes) List(id WorkflowID) ([]*Node, error) {
 			return nil, err
 		}
 		elem.nfunc = defNodeFunc
+		ary = append(ary, &elem)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ary, nil
+}
+
+// NodeList answers a list of the nodes 增加了accid.
+func (_Nodes) NodeList(offset, limit int64) ([]*Node, error) {
+	if offset < 0 || limit < 0 {
+		return nil, errors.New("offset and limit must be non-negative integers")
+	}
+	if limit == 0 {
+		limit = math.MaxInt64
+	}
+
+	q := `
+	SELECT id, doctype_id, docstate_id, ac_id, workflow_id, name, type
+	FROM wf_workflow_nodes
+	ORDER BY id
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ary := make([]*Node, 0, 10)
+	for rows.Next() {
+		var elem Node
+		err = rows.Scan(&elem.ID, &elem.DocType, &elem.State, &elem.AccCtx, &elem.Wflow, &elem.Name, &elem.NodeType)
+		if err != nil {
+			return nil, err
+		}
+		elem.nfunc = defNodeFunc //这个是干嘛的
 		ary = append(ary, &elem)
 	}
 	if err = rows.Err(); err != nil {
